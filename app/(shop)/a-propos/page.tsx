@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Check, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { EDITORIAL_IMAGE, STORY_IMAGE } from "@/lib/demo-data";
+import { EDITORIAL_IMAGE, STORY_IMAGE } from "@/lib/catalog-seed-data";
 
 export const metadata: Metadata = {
   title: "Notre histoire",

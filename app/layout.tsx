@@ -2,9 +2,10 @@ import type { Metadata, Viewport } from "next";
 
 import { Providers } from "@/app/providers";
 import "@/app/globals.css";
+import { getPublicBaseUrl } from "@/lib/site-url";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(getPublicBaseUrl()),
   title: {
     default: "DESCO MALL — Le Distributeur qui Distribue les Distributeurs",
     template: "%s | DESCO MALL",

@@ -21,7 +21,7 @@ function createPrismaClient(): PrismaClient {
 
   if (!connectionString) {
     // Aucune base configurée : le client reste inerte.
-    // Le catalogue bascule automatiquement sur les données de démonstration.
+    // Les lectures de données retournent des résultats vides tant que la base n'est pas configurée.
     return new PrismaClient({ log: [...log] });
   }
 

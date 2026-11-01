@@ -62,8 +62,7 @@ export default async function AdminCategoriesPage() {
         <h2 className="text-[13.5px] font-semibold">Gestion des catégories</h2>
         <p className="mt-1 max-w-2xl text-[11.5px] leading-relaxed text-ink-muted">
           La création et la réorganisation par glisser-déposer sont prévues dans le schéma
-          Prisma (parent/enfant, position). Connectez Neon pour activer l&apos;édition réelle ;
-          en démonstration, les catégories sont en lecture seule.
+          Prisma (parent/enfant, position). L&apos;édition des catégories sera disponible dans une prochaine mise à jour.
         </p>
       </section>
     </div>

@@ -26,7 +26,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
 
   return (
     <article className="group relative">
-      <div className="relative aspect-[3/4] overflow-hidden rounded-md bg-paper-tint">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-md bg-paper-tint">
         <Link
           href={`/produit/${product.slug}`}
           className="block h-full w-full"
@@ -37,7 +37,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
               src={primary.url}
               alt={primary.alt}
               fill
-              sizes="(max-width: 520px) 50vw, (max-width: 900px) 33vw, 280px"
+              sizes="(max-width: 520px) 50vw, (max-width: 900px) 33vw, (max-width: 1280px) 25vw, 20vw"
               className={cn(
                 "object-cover transition-all duration-500",
                 secondary && "group-hover:opacity-0",
@@ -50,7 +50,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
               src={secondary.url}
               alt={secondary.alt}
               fill
-              sizes="(max-width: 520px) 50vw, (max-width: 900px) 33vw, 280px"
+              sizes="(max-width: 520px) 50vw, (max-width: 900px) 33vw, (max-width: 1280px) 25vw, 20vw"
               className="object-cover opacity-0 transition-all duration-500 group-hover:opacity-100"
             />
           )}
@@ -108,9 +108,9 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
         </Link>
       </div>
 
-      <div className="mt-3">
+        <div className="mt-2.5">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="text-[13.5px] font-medium leading-snug text-brand-black">
+          <h3 className="line-clamp-1 text-[13px] font-medium leading-snug text-brand-black">
             <Link href={`/produit/${product.slug}`} className="hover:underline hover:underline-offset-2">
               {product.name}
             </Link>
@@ -127,7 +127,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
           </div>
         </div>
         <div className="mt-1 flex flex-wrap items-baseline gap-2">
-          <span className="text-[14px] font-bold text-brand-black">
+          <span className="text-[13px] font-bold text-brand-black">
             {formatPrice(product.price)}
           </span>
           {product.comparePrice && (

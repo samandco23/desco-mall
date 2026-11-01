@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveSettings } from "@/lib/actions/admin";
+import { Select } from "@/components/ui/select";
 import { SHIPPING_FEES, formatPrice } from "@/lib/utils";
 
 type Integrations = {
   database: boolean;
   fapshi: boolean;
+  kpay: boolean;
   brevo: boolean;
   redis: boolean;
   uploadthing: boolean;
@@ -23,15 +25,14 @@ export function SettingsForm({
   initial,
   integrations,
 }: {
-  initial: { shopName: string; shopEmail: string; shopPhone: string; shopAddress: string };
+  initial: { shopName: string; shopEmail: string; shopPhone: string; shopAddress: string; paymentProvider: "FAPSHI" | "KPAY" };
   integrations: Integrations;
 }) {
   const [values, setValues] = useState(initial);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function persistSettings() {
     setPending(true);
     setMessage(null);
     const result = await saveSettings(values);
@@ -39,9 +40,15 @@ export function SettingsForm({
     setMessage({ ok: result.ok, text: result.message });
   }
 
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    await persistSettings();
+  }
+
   const integrationRows: { label: string; description: string; enabled: boolean }[] = [
     { label: "Neon PostgreSQL", description: "Base de données et Prisma", enabled: integrations.database },
     { label: "Fapshi", description: "MTN MoMo & Orange Money", enabled: integrations.fapshi },
+    { label: "KPay", description: "Paiement Mobile Money via page sécurisée KPay", enabled: integrations.kpay },
     { label: "Brevo", description: "Emails transactionnels et CRM", enabled: integrations.brevo },
     { label: "Upstash Redis", description: "Panier invité et rate limiting", enabled: integrations.redis },
     { label: "Uploadthing", description: "Upload des images produit", enabled: integrations.uploadthing },
@@ -138,12 +145,22 @@ export function SettingsForm({
             </li>
           ))}
         </ul>
+        <div className="mt-4 max-w-sm">
+          <Label htmlFor="paymentProvider">Fournisseur actif au paiement</Label>
+          <Select id="paymentProvider" value={values.paymentProvider} onChange={(event) => setValues({ ...values, paymentProvider: event.target.value as "FAPSHI" | "KPAY" })} className="mt-1.5">
+            <option value="FAPSHI" disabled={!integrations.fapshi}>Fapshi{integrations.fapshi ? "" : " — à configurer"}</option>
+            <option value="KPAY" disabled={!integrations.kpay}>KPay{integrations.kpay ? "" : " — à configurer"}</option>
+          </Select>
+          <p className="mt-1 text-[10.5px] text-ink-faint">Le fournisseur ne peut être sélectionné que si ses clés serveur sont configurées.</p>
+          <Button type="button" size="sm" disabled={pending} onClick={persistSettings} className="mt-3">{pending ? "Enregistrement…" : "Enregistrer le fournisseur"}</Button>
+          {message && <p className={`mt-2 text-[11px] ${message.ok ? "text-brand-success" : "text-brand-accent"}`} role="status">{message.text}</p>}
+        </div>
       </section>
 
       <section className="rounded-md border border-ink-line bg-white p-4">
         <h2 className="text-[14px] font-semibold">Frais de livraison</h2>
         <p className="mt-0.5 text-[11px] text-ink-muted">
-          Barème appliqué au checkout. Modifiable dans les paramètres de la boutique.
+          Barème appliqué au checkout selon la destination.
         </p>
         <div className="mt-3 grid gap-x-8 sm:grid-cols-2">
           {Object.entries(SHIPPING_FEES).map(([city, fee]) => (
@@ -162,11 +179,16 @@ export function SettingsForm({
         <h2 className="text-[14px] font-semibold">Webhooks</h2>
         <div className="mt-3 space-y-2 text-[11.5px]">
           <div className="rounded-sm bg-paper-soft px-3 py-2">
-            <p className="font-medium">Fapshi — paiement</p>
+            <p className="font-medium">Fapshi — paiement (si activé)</p>
             <code className="text-[10.5px] text-ink-muted">POST /api/webhooks/fapshi</code>
             <p className="mt-1 text-[10px] text-ink-faint">
               Signature HMAC-SHA256 vérifiée avec FAPSHI_WEBHOOK_SECRET.
             </p>
+          </div>
+          <div className="rounded-sm bg-paper-soft px-3 py-2">
+            <p className="font-medium">KPay — paiement</p>
+            <code className="text-[10.5px] text-ink-muted">POST /api/webhooks/kpay</code>
+            <p className="mt-1 text-[10px] text-ink-faint">Configurez l’URL dans le tableau de bord KPay et définissez KPAY_API_KEY, KPAY_SECRET_KEY et KPAY_WEBHOOK_SECRET dans Vercel.</p>
           </div>
           <div className="rounded-sm bg-paper-soft px-3 py-2">
             <p className="font-medium">Stock externe</p>
@@ -178,19 +200,6 @@ export function SettingsForm({
         </div>
       </section>
 
-      <section className="rounded-md border border-ink-line bg-white p-4">
-        <h2 className="text-[14px] font-semibold">Codes promo actifs</h2>
-        <ul className="mt-3 space-y-2 text-[11.5px]">
-          <li className="flex items-center justify-between">
-            <span className="font-mono font-semibold">DESCO10</span>
-            <span className="text-ink-muted">−10 % sur le panier</span>
-          </li>
-          <li className="flex items-center justify-between">
-            <span className="font-mono font-semibold">BIENVENUE5</span>
-            <span className="text-ink-muted">−5 % sur le panier</span>
-          </li>
-        </ul>
-      </section>
     </div>
   );
 }

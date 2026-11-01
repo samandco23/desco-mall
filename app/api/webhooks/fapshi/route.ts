@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   if (!hasDatabase) {
-    return NextResponse.json({ received: true, demo: true }, { status: 200 });
+    return NextResponse.json({ message: "Service indisponible." }, { status: 503 });
   }
 
   try {
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
     }
     const order = await db.order.findFirst({
       where: {
+        paymentProvider: "FAPSHI",
         OR: [
           { fapshiPaymentId: payload.transferCode },
           ...(payload.userId ? [{ id: payload.userId }] : []),

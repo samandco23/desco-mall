@@ -14,8 +14,8 @@ export const metadata: Metadata = {
 
 const HIGHLIGHTED: OrderStatus[] = ["PENDING", "PROCESSING", "SHIPPED"];
 
-export default function AdminOrdersPage() {
-  const orders = getAdminOrders();
+export default async function AdminOrdersPage() {
+  const orders = await getAdminOrders();
   const counts = orders.reduce<Record<string, number>>((accumulator, order) => {
     accumulator[order.status] = (accumulator[order.status] ?? 0) + 1;
     return accumulator;

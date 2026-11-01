@@ -15,10 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { DemoOrder, OrderStatus } from "@/lib/types";
+import type { OrderRecord, OrderStatus } from "@/lib/types";
 import { formatDate, formatPrice } from "@/lib/utils";
 
-export function OrdersTable({ orders }: { orders: DemoOrder[] }) {
+export function OrdersTable({ orders }: { orders: OrderRecord[] }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
 

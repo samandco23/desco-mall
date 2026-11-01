@@ -10,24 +10,24 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          black: "#111111",
+          black: "#1C1917",
           white: "#FFFFFF",
-          accent: "#E8252A",
-          "accent-bg": "#FFF0F0",
-          success: "#1a7c3e",
+          accent: "#A84335",
+          "accent-bg": "#F9ECE9",
+          success: "#26754B",
           warning: "#F59E0B",
         },
         ink: {
-          DEFAULT: "#111111",
-          soft: "#333333",
-          muted: "#666666",
-          faint: "#AAAAAA",
-          line: "#E8E8E8",
+          DEFAULT: "#1C1917",
+          soft: "#44403C",
+          muted: "#6B625C",
+          faint: "#8B8179",
+          line: "#E6E0D8",
         },
         paper: {
-          DEFAULT: "#FFFFFF",
-          soft: "#F9F9F9",
-          tint: "#F2F2F2",
+          DEFAULT: "#FAFAF9",
+          soft: "#F4F1EC",
+          tint: "#ECE7DF",
         },
       },
       fontFamily: {
@@ -52,8 +52,8 @@ const config: Config = {
         md: "10px",
         lg: "14px",
       },
-      maxWidth: {
-        container: "1200px",
+    maxWidth: {
+        container: "1320px",
       },
       spacing: {
         "container-x": "24px",

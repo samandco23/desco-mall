@@ -6,11 +6,9 @@ import { Check, MapPin, Phone, Smartphone, Truck } from "lucide-react";
 import { ClearCartOnMount } from "@/components/checkout/clear-cart";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
-import { getDemoOrderByNumber } from "@/lib/catalog";
 import { db, hasDatabase } from "@/lib/db";
-import { findDemoOrder } from "@/lib/demo-order-store";
 import { formatDate, formatPrice } from "@/lib/utils";
-import type { OrderStatus } from "@/lib/types";
+import type { OrderStatus, PaymentStatus } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Commande confirmée",
@@ -28,6 +26,7 @@ type ConfirmationOrder = {
   shippingFee: number;
   paymentMethod: string;
   status: OrderStatus;
+  paymentStatus: PaymentStatus;
   createdAt: string;
   items: {
     productName: string;
@@ -55,45 +54,28 @@ const STATUS_RANK: Record<OrderStatus, number> = {
   REFUNDED: 0,
 };
 
-async function loadOrder(orderNumber: string, userId?: string): Promise<ConfirmationOrder | null> {
-  const demo = findDemoOrder(orderNumber) ?? getDemoOrderByNumber(orderNumber);
-  if (demo) {
-    return {
-      orderNumber: demo.orderNumber,
-      customerName: demo.customerName,
-      customerEmail: demo.customerEmail,
-      customerPhone: demo.customerPhone,
-      city: demo.city,
-      neighborhood: demo.neighborhood,
-      total: demo.total,
-      shippingFee: demo.shippingFee,
-      paymentMethod: demo.paymentMethod,
-      status: demo.status,
-      createdAt: demo.createdAt,
-      items: demo.items,
-    };
-  }
-
+async function loadOrder(orderNumber: string, userId?: string, token?: string): Promise<ConfirmationOrder | null> {
   if (!hasDatabase) return null;
 
   try {
-    if (!userId) return null;
+    if (!userId && !token) return null;
     const order = await db.order.findFirst({
-      where: { orderNumber, userId },
-      include: { items: true },
+      where: { orderNumber, ...(token ? { confirmationToken: token } : { userId }) },
+      include: { items: true, address: true, user: true },
     });
     if (!order) return null;
     return {
       orderNumber: order.orderNumber,
-      customerName: order.guestEmail ? "Client DESCO" : "Client DESCO",
-      customerEmail: order.guestEmail ?? "",
-      customerPhone: order.guestPhone ?? "",
+      customerName: order.address?.fullName ?? order.user?.name ?? "Client DESCO",
+      customerEmail: order.user?.email ?? order.guestEmail ?? "",
+      customerPhone: order.address?.phone ?? order.guestPhone ?? "",
       city: order.shippingCity ?? "",
-      neighborhood: "",
+      neighborhood: order.address?.neighborhood ?? order.shippingNeighborhood ?? "",
       total: order.total,
       shippingFee: order.shippingFee,
       paymentMethod: order.paymentMethod,
       status: order.status,
+      paymentStatus: order.paymentStatus,
       createdAt: order.createdAt.toISOString(),
       items: order.items.map((item) => ({
         productName: item.productName,
@@ -112,15 +94,15 @@ async function loadOrder(orderNumber: string, userId?: string): Promise<Confirma
 export default async function ConfirmationPage({
   searchParams,
 }: {
-  searchParams: { order?: string };
+  searchParams: { order?: string; token?: string };
 }) {
   const session = await auth();
-  const order = searchParams.order ? await loadOrder(searchParams.order, session?.user?.id) : null;
+  const order = searchParams.order ? await loadOrder(searchParams.order, session?.user?.id, searchParams.token) : null;
   const currentRank = order ? STATUS_RANK[order.status] : 1;
 
   return (
     <div className="container-shop py-10 md:py-14">
-      <ClearCartOnMount />
+      <ClearCartOnMount enabled={order?.status === "PAID"} orderNumber={searchParams.order} confirmationToken={searchParams.token} />
 
       <div className="mx-auto max-w-2xl text-center">
         <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#EEF7F0] text-brand-success">
@@ -128,20 +110,18 @@ export default async function ConfirmationPage({
         </span>
         <p className="eyebrow mt-5">Étape 3 sur 3</p>
         <h1 className="mt-2 text-balance text-[28px] font-bold tracking-[-0.03em] md:text-[34px]">
-          {order?.status === "PAID" ? "Merci, votre commande est confirmée." : "Votre commande a bien été reçue."}
+          {order?.paymentStatus === "PAID" ? "Merci, votre commande est confirmée." : order?.paymentStatus === "FAILED" || order?.status === "CANCELLED" ? "Le paiement n’a pas abouti." : order ? "Votre paiement est en attente." : "Commande introuvable."}
         </h1>
         <p className="mt-3 text-[13.5px] leading-relaxed text-ink-muted">
           {order ? (
             <>
-              Votre commande{" "}
+              {order.status === "PAID" ? "Votre commande" : "Paiement en attente pour la commande"}{" "}
               <span className="font-semibold text-brand-black">{order.orderNumber}</span> a bien
-              été enregistrée. Notre équipe vous contacte sur WhatsApp pour confirmer la
-              livraison.
+              {order.paymentStatus === "PAID" ? "a été payée. Notre équipe vous contacte pour confirmer la livraison." : order.paymentStatus === "FAILED" || order.status === "CANCELLED" ? "n’a pas été payée. Votre panier est conservé ; vous pouvez revenir au panier pour réessayer." : "est enregistrée, mais le paiement n’est pas encore confirmé. Ne repassez pas commande ; cette page se mettra à jour après confirmation."}
             </>
           ) : (
             <>
-              Votre commande a bien été reçue. Si vous avez un doute, contactez-nous sur WhatsApp
-              avec votre numéro de commande.
+              Nous ne trouvons pas de commande confirmée associée à ce lien. Vérifiez votre compte avant de réessayer.
             </>
           )}
         </p>

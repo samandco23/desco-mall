@@ -31,10 +31,9 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default function AdminDashboardPage() {
-  const stats = getAdminStats();
-  const recentOrders = getAdminOrders().slice(0, 6);
-  const revenueSeries = getRevenueSeries(30);
+export default async function AdminDashboardPage() {
+  const [stats, allOrders, revenueSeries] = await Promise.all([getAdminStats(), getAdminOrders(), getRevenueSeries(30)]);
+  const recentOrders = allOrders.slice(0, 6);
   const revenue30 = revenueSeries.reduce((sum, point) => sum + point.revenue, 0);
 
   return (

@@ -1,16 +1,13 @@
-import { demoOrders } from "@/lib/demo-data";
 import { db, hasDatabase } from "@/lib/db";
-import type { DemoOrder } from "@/lib/types";
+import type { OrderRecord } from "@/lib/types";
 
 export async function getCustomerOrders(
   email: string,
   userId: string,
   name: string
-): Promise<DemoOrder[]> {
+): Promise<OrderRecord[]> {
   if (!hasDatabase) {
-    return [...demoOrders]
-      .filter((order) => order.customerEmail === email)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [];
   }
 
   try {
@@ -62,7 +59,7 @@ export async function getCustomerOrder(
   email: string,
   userId: string,
   name: string
-): Promise<DemoOrder | null> {
+): Promise<OrderRecord | null> {
   const orders = await getCustomerOrders(email, userId, name);
   return (
     orders.find(
@@ -71,7 +68,7 @@ export async function getCustomerOrder(
   );
 }
 
-export function customerStats(orders: DemoOrder[]) {
+export function customerStats(orders: OrderRecord[]) {
   const paid = orders.filter((order) => order.paymentStatus === "PAID");
   const active = orders.filter((order) =>
     ["PENDING", "PAID", "PROCESSING", "SHIPPED"].includes(order.status)

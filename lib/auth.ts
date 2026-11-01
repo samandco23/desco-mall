@@ -5,7 +5,6 @@ import bcrypt from "bcryptjs";
 
 import { authConfig } from "@/auth.config";
 import { db, hasDatabase } from "@/lib/db";
-import { DEMO_ACCOUNTS } from "@/lib/demo-data";
 import { loginSchema } from "@/lib/validations/user";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -24,18 +23,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const email = parsed.data.email.toLowerCase();
 
-        if (!hasDatabase) {
-          const demo = Object.values(DEMO_ACCOUNTS).find(
-            (account) => account.email === email
-          );
-          if (!demo || demo.password !== parsed.data.password) return null;
-          return {
-            id: demo.id,
-            name: demo.name,
-            email: demo.email,
-            role: demo.role,
-          };
-        }
+        if (!hasDatabase) return null;
 
         const user = await db.user.findUnique({ where: { email } });
         if (!user?.passwordHash) return null;

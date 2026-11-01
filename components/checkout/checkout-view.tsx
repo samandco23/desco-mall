@@ -50,12 +50,15 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function CheckoutView({ demoMode }: { demoMode: boolean }) {
+type CheckoutDefaults = {
+  fullName: string; email: string; phone: string; city: string; neighborhood: string;
+  instructions: string; paymentMethod: "MTN_MOMO" | "ORANGE_MONEY";
+};
+
+export function CheckoutView({ defaults }: { defaults: CheckoutDefaults }) {
   const router = useRouter();
   const mounted = useMounted();
   const items = useCartStore((state) => state.items);
-  const discountPercent = useCartStore((state) => state.discountPercent);
-  const clear = useCartStore((state) => state.clear);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {
@@ -65,15 +68,7 @@ export function CheckoutView({ demoMode }: { demoMode: boolean }) {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      fullName: "",
-      email: "",
-      phone: "",
-      city: "Douala",
-      neighborhood: "",
-      instructions: "",
-      paymentMethod: "MTN_MOMO",
-    },
+    defaultValues: { ...defaults },
   });
 
   const city = watch("city");
@@ -105,9 +100,8 @@ export function CheckoutView({ demoMode }: { demoMode: boolean }) {
   }
 
   const subtotal = cartSubtotal(items);
-  const discount = Math.round((subtotal * discountPercent) / 100);
   const shippingFee = shippingFeeFor(city);
-  const total = subtotal - discount + shippingFee;
+  const total = subtotal + shippingFee;
 
   async function onSubmit(values: FormValues) {
     setServerError(null);
@@ -121,12 +115,11 @@ export function CheckoutView({ demoMode }: { demoMode: boolean }) {
       return;
     }
 
-    clear();
     if (result.redirectUrl) {
       window.location.href = result.redirectUrl;
       return;
     }
-    router.push(`/checkout/confirmation?order=${encodeURIComponent(result.orderNumber)}`);
+    router.push(`/checkout/confirmation?order=${encodeURIComponent(result.orderNumber)}&token=${result.confirmationToken}`);
   }
 
   return (
@@ -304,15 +297,9 @@ export function CheckoutView({ demoMode }: { demoMode: boolean }) {
                 </label>
               ))}
             </div>
-            {demoMode && (
-              <p className="mt-4 rounded-sm bg-paper-soft px-3 py-2 text-[11px] leading-relaxed text-ink-muted">
-                Environnement de démonstration : la demande Mobile Money est simulée. Aucun
-                montant ne sera débité.
-              </p>
-            )}
             <p className="mt-4 flex items-center gap-1.5 text-[11px] text-ink-faint">
-              <Lock className="h-3 w-3" /> Vos informations de paiement ne sont jamais stockées
-              par DESCO MALL.
+              <Lock className="h-3 w-3" /> Votre moyen Mobile Money préféré est mémorisé pour
+              faciliter vos prochains achats. Aucun code PIN ni code de validation n’est enregistré.
             </p>
           </section>
 
@@ -358,12 +345,6 @@ export function CheckoutView({ demoMode }: { demoMode: boolean }) {
                 <dt className="text-ink-muted">Sous-total</dt>
                 <dd className="font-semibold">{formatPrice(subtotal)}</dd>
               </div>
-              {discount > 0 && (
-                <div className="flex justify-between gap-4 text-brand-accent">
-                  <dt>Remise ({discountPercent} %)</dt>
-                  <dd className="font-semibold">−{formatPrice(discount)}</dd>
-                </div>
-              )}
               <div className="flex justify-between gap-4">
                 <dt className="text-ink-muted">Livraison — {city}</dt>
                 <dd className="font-semibold">{formatPrice(shippingFee)}</dd>

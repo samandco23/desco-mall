@@ -1,14 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Lock, ShoppingBag, Tag, Trash2, X } from "lucide-react";
+import { ArrowLeft, Lock, ShoppingBag, Trash2 } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { QuantityControl } from "@/components/shared/quantity-control";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useMounted } from "@/hooks/use-mounted";
 import { formatPrice } from "@/lib/utils";
 import { unitPriceFor } from "@/lib/wholesale";
@@ -19,13 +17,6 @@ export function CartView() {
   const items = useCartStore((state) => state.items);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
-  const discountPercent = useCartStore((state) => state.discountPercent);
-  const promo = useCartStore((state) => state.promo);
-  const applyPromo = useCartStore((state) => state.applyPromo);
-  const removePromo = useCartStore((state) => state.removePromo);
-  const [code, setCode] = useState("");
-  const [promoMessage, setPromoMessage] = useState<string | null>(null);
-  const [promoError, setPromoError] = useState(false);
 
   if (!mounted) {
     return (
@@ -36,7 +27,6 @@ export function CartView() {
   }
 
   const subtotal = cartSubtotal(items);
-  const discount = Math.round((subtotal * discountPercent) / 100);
 
   if (items.length === 0) {
     return (
@@ -53,14 +43,6 @@ export function CartView() {
         </div>
       </div>
     );
-  }
-
-  function handlePromo(event: React.FormEvent) {
-    event.preventDefault();
-    const result = applyPromo(code);
-    setPromoMessage(result.message);
-    setPromoError(!result.ok);
-    if (result.ok) setCode("");
   }
 
   return (
@@ -152,61 +134,6 @@ export function CartView() {
             })}
           </ul>
 
-          <div className="mt-6 rounded-md border border-ink-line p-4">
-            <p className="flex items-center gap-2 text-[13px] font-semibold">
-              <Tag className="h-4 w-4" /> Un code promo ?
-            </p>
-            {promo && discountPercent > 0 ? (
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-sm bg-paper-soft px-3 py-2">
-                <div>
-                  <p className="text-[12.5px] font-semibold">{promo}</p>
-                  <p className="text-[11px] text-brand-success">
-                    −{discountPercent} % appliqué à votre commande
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    removePromo();
-                    setPromoMessage(null);
-                  }}
-                  aria-label="Retirer le code promo"
-                  className="text-ink-faint hover:text-brand-accent"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handlePromo} className="mt-3 flex gap-2">
-                <Input
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                  placeholder="Ex. DESCO10"
-                  aria-label="Code promo"
-                  className="uppercase"
-                />
-                <Button type="submit" variant="outline" className="shrink-0">
-                  Appliquer
-                </Button>
-              </form>
-            )}
-            {promoMessage && (
-              <p
-                className={
-                  promoError
-                    ? "mt-2 text-[11.5px] text-brand-accent"
-                    : "mt-2 text-[11.5px] text-brand-success"
-                }
-                role="status"
-              >
-                {promoMessage}
-              </p>
-            )}
-            <p className="mt-2 text-[10.5px] text-ink-faint">
-              Astuce démo : essayez <span className="font-semibold">DESCO10</span> ou{" "}
-              <span className="font-semibold">BIENVENUE5</span>.
-            </p>
-          </div>
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:h-fit">
@@ -217,19 +144,13 @@ export function CartView() {
                 <dt className="text-ink-muted">Sous-total</dt>
                 <dd className="font-semibold">{formatPrice(subtotal)}</dd>
               </div>
-              {discount > 0 && (
-                <div className="flex justify-between gap-4 text-brand-accent">
-                  <dt>Remise ({discountPercent} %)</dt>
-                  <dd className="font-semibold">−{formatPrice(discount)}</dd>
-                </div>
-              )}
               <div className="flex justify-between gap-4">
                 <dt className="text-ink-muted">Livraison</dt>
                 <dd className="text-ink-muted">Calculée au paiement</dd>
               </div>
               <div className="flex justify-between gap-4 border-t border-ink-line pt-3 text-[15px]">
                 <dt className="font-semibold">Total estimé</dt>
-                <dd className="font-bold">{formatPrice(subtotal - discount)}</dd>
+                <dd className="font-bold">{formatPrice(subtotal)}</dd>
               </div>
             </dl>
             <Button asChild className="mt-5 w-full">

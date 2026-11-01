@@ -27,9 +27,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Administration DESCO MALL · {formatDate(new Date())}
           </p>
           <div className="flex items-center gap-4">
-            <span className="rounded-sm bg-paper-soft px-2 py-1 text-[10.5px] text-ink-muted">
-              Environnement de démonstration
-            </span>
             <Link
               href="/"
               className="text-[11.5px] font-medium text-brand-black underline-offset-4 hover:underline"

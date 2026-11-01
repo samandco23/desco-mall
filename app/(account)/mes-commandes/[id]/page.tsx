@@ -12,6 +12,7 @@ import {
 import { getCustomerOrder } from "@/lib/account";
 import { auth } from "@/lib/auth";
 import { formatDate, formatPrice } from "@/lib/utils";
+import type { PaymentStatus } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Détail de la commande",
@@ -32,6 +33,14 @@ const RANK: Record<string, number> = {
   PROCESSING: 3,
   SHIPPED: 4,
   DELIVERED: 5,
+};
+
+const PAYMENT_LABELS: Record<PaymentStatus, string> = {
+  UNPAID: "Non payé",
+  PENDING_CONFIRMATION: "En attente de confirmation",
+  PAID: "Confirmé",
+  FAILED: "Échec du paiement",
+  REFUNDED: "Remboursé",
 };
 
 export default async function OrderDetailPage({ params }: { params: { id: string } }) {
@@ -192,7 +201,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             <p className="mt-2.5 text-[12px] text-ink-muted">
               {paymentMethodLabel(order.paymentMethod)}
               <br />
-              <span className="text-brand-success">Confirmé</span>
+              <span className={order.paymentStatus === "PAID" ? "font-medium text-brand-success" : order.paymentStatus === "FAILED" ? "font-medium text-brand-accent" : "font-medium text-ink-muted"}>
+                {PAYMENT_LABELS[order.paymentStatus]}
+              </span>
             </p>
           </section>
           <section className="rounded-lg bg-paper-soft p-4">

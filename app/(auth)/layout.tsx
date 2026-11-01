@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { Logo } from "@/components/shared/logo";
-import { STORY_IMAGE } from "@/lib/demo-data";
+import { STORY_IMAGE } from "@/lib/catalog-seed-data";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (

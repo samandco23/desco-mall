@@ -98,34 +98,6 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
         </Button>
       </form>
 
-      <div className="mt-7 rounded-md border border-ink-line bg-paper-soft p-4">
-        <p className="text-[11.5px] font-semibold text-brand-black">Environnement de démonstration</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">
-          Utilisez un compte de test pour explorer la boutique. Les mots de passe sont fictifs.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setEmail("client@descomall.cm");
-              setPassword("client123");
-            }}
-            className="rounded-sm border border-ink-line bg-white px-2.5 py-1.5 text-[11px] font-medium transition-colors hover:border-ink-faint"
-          >
-            Client — client@descomall.cm
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setEmail("admin@descomall.cm");
-              setPassword("admin123");
-            }}
-            className="rounded-sm border border-ink-line bg-white px-2.5 py-1.5 text-[11px] font-medium transition-colors hover:border-ink-faint"
-          >
-            Admin — admin@descomall.cm
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

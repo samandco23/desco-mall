@@ -28,9 +28,8 @@ export async function updateProfile(formData: FormData): Promise<ProfileState> {
 
   if (!hasDatabase) {
     return {
-      ok: true,
-      message:
-        "Informations validées. En mode démonstration, elles ne sont pas enregistrées en base.",
+      ok: false,
+      message: "Le service de compte est momentanément indisponible.",
     };
   }
 

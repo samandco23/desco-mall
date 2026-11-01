@@ -12,8 +12,8 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default function AdminClientsPage() {
-  const customers = getAdminCustomers();
+export default async function AdminClientsPage() {
+  const customers = await getAdminCustomers();
   const totalSpent = customers.reduce((sum, customer) => sum + customer.totalSpent, 0);
   const average = customers.length > 0 ? Math.round(totalSpent / customers.length) : 0;
   const recurring = customers.filter((customer) => customer.orderCount > 1).length;

@@ -1,18 +1,20 @@
 "use server";
 
 import { headers } from "next/headers";
+import { randomBytes } from "node:crypto";
 
 import { auth } from "@/lib/auth";
 import { getProducts } from "@/lib/catalog";
 import { db, hasDatabase } from "@/lib/db";
-import { findDemoOrder, saveDemoOrder } from "@/lib/demo-order-store";
 import {
   initiateFapshiPayment,
   isFapshiConfigured,
   type FapshiPaymentResponse,
 } from "@/lib/fapshi";
+import { initiateKpayPayment, isKpayConfigured } from "@/lib/kpay";
 import { rateLimit } from "@/lib/redis";
-import type { DemoOrder, OrderStatus } from "@/lib/types";
+import { getPublicBaseUrl } from "@/lib/site-url";
+import type { OrderRecord, OrderStatus } from "@/lib/types";
 import { shippingFeeFor } from "@/lib/utils";
 import { unitPriceFor } from "@/lib/wholesale";
 import {
@@ -92,8 +94,8 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
   const total = subtotal + shippingFee;
   const year = new Date().getFullYear();
   const orderNumber = orderNumberFor(year);
+  const confirmationToken = randomBytes(32).toString("hex");
   const session = await auth();
-  const now = new Date().toISOString();
 
   const unavailable = lines.find(({ product, line }) => {
     const available = product.stock[line.size] ?? 0;
@@ -103,43 +105,35 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
     return { ok: false, message: "Un article de votre panier n'est plus disponible." };
   }
 
-  if (!hasDatabase) {
-    const demoOrder: DemoOrder = {
-      id: `ord_${Date.now()}`,
-      orderNumber,
-      customerName: parsed.data.fullName,
-      customerEmail: parsed.data.email,
-      customerPhone: parsed.data.phone,
-      city: parsed.data.city,
-      neighborhood: parsed.data.neighborhood,
-      status: "PAID",
-      paymentStatus: "PAID",
-      paymentMethod: parsed.data.paymentMethod,
-      total,
-      shippingFee,
-      items: lines.map(({ product, line }) => ({
-        productName: product.name,
-        variantInfo: `Taille: ${line.size}, Couleur: ${line.color}`,
-        imageUrl: product.images[0]?.url,
-        quantity: line.quantity,
-        unitPrice: unitPriceFor(product.price, line.quantity),
-      })),
-      createdAt: now,
-      timeline: [
-        { status: "PENDING", note: "Commande créée", at: now },
-        {
-          status: "PAID",
-          note: `Paiement ${parsed.data.paymentMethod === "MTN_MOMO" ? "MTN MoMo" : "Orange Money"} simulé (démo)`,
-          at: now,
-        },
-      ],
-    };
-    saveDemoOrder(demoOrder);
-    return { ok: true, orderNumber };
-  }
+  if (!hasDatabase) return { ok: false, message: "Le service de commande est momentanément indisponible." };
 
   try {
+    const configuredProvider = hasDatabase ? await db.setting.findUnique({ where: { key: "payment.provider" } }) : null;
+    const paymentProvider = configuredProvider?.value === "KPAY" ? "KPAY" : "FAPSHI";
+    if (paymentProvider === "KPAY" ? !isKpayConfigured : !isFapshiConfigured) {
+      return { ok: false, message: `Le paiement ${paymentProvider === "KPAY" ? "KPay" : "Fapshi"} n'est pas configuré.` };
+    }
     const order = await db.$transaction(async (tx) => {
+      let addressId: string | undefined;
+      if (session?.user?.id) {
+        await tx.user.update({
+          where: { id: session.user.id },
+          data: { name: parsed.data.fullName, phone: parsed.data.phone, preferredPaymentMethod: parsed.data.paymentMethod },
+        });
+        const address = await tx.address.findFirst({ where: { userId: session.user.id, isDefault: true } });
+        const addressData = {
+          fullName: parsed.data.fullName, phone: parsed.data.phone, city: parsed.data.city,
+          neighborhood: parsed.data.neighborhood, instructions: parsed.data.instructions || null,
+          label: "Domicile", isDefault: true,
+        };
+        if (address) {
+          const saved = await tx.address.update({ where: { id: address.id }, data: addressData });
+          addressId = saved.id;
+        } else {
+          const saved = await tx.address.create({ data: { userId: session.user.id, ...addressData } });
+          addressId = saved.id;
+        }
+      }
       const reserved: { productId: string; variantId: string; quantity: number; product: typeof lines[number]["product"]; line: typeof lines[number]["line"] }[] = [];
       for (const { product, line } of lines) {
         const variant = await tx.productVariant.findFirst({
@@ -156,16 +150,20 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
       const created = await tx.order.create({
         data: {
           orderNumber,
+          confirmationToken,
           userId: session?.user?.id ?? null,
+          addressId,
           guestEmail: session?.user?.id ? null : parsed.data.email,
-          guestPhone: session?.user?.id ? null : parsed.data.phone,
+          guestPhone: parsed.data.phone,
           status: "PENDING",
           paymentStatus: "UNPAID",
           paymentMethod: parsed.data.paymentMethod,
+          paymentProvider,
           subtotal,
           shippingFee,
           total,
           shippingCity: parsed.data.city,
+          shippingNeighborhood: parsed.data.neighborhood,
           notes: parsed.data.instructions,
           items: { create: reserved.map(({ product, line, variantId }) => ({
             productId: product.id, variantId, productName: product.name,
@@ -183,31 +181,18 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
       return created;
     });
 
-    if (!isFapshiConfigured) {
-      await db.$transaction(async (tx) => {
-        const canceled = await tx.order.updateMany({ where: { id: order.id, paymentStatus: "UNPAID" }, data: { status: "CANCELLED", paymentStatus: "FAILED" } });
-        if (canceled.count) {
-          const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
-          for (const item of items) if (item.variantId) {
-            await tx.productVariant.update({ where: { id: item.variantId }, data: { stock: { increment: item.quantity } } });
-          }
-          await tx.orderStatusHistory.create({ data: { orderId: order.id, status: "CANCELLED", note: "Paiement non configuré; stock restitué" } });
-        }
-      });
-      return { ok: false, message: "Le paiement n'est pas configuré. Aucun stock n'a été réservé durablement." };
-    }
-
-    let payment: FapshiPaymentResponse | null = null;
+    let payment: { id: string; reference: string; redirectUrl?: string } | null = null;
     try {
-      payment = await initiateFapshiPayment({
-        amount: Math.round(total / 100),
-        email: parsed.data.email,
-        message: `Commande ${order.orderNumber} — DESCO MALL`,
-        userId: order.id,
-        redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL}/checkout/confirmation?order=${order.orderNumber}`,
-      });
+      const returnUrl = `${getPublicBaseUrl(requestHeaders)}/checkout/confirmation?order=${encodeURIComponent(order.orderNumber)}&token=${confirmationToken}`;
+      if (paymentProvider === "KPAY") {
+        const kpay = await initiateKpayPayment({ amount: Math.round(total / 100), externalId: order.orderNumber, provider: parsed.data.paymentMethod === "ORANGE_MONEY" ? "ORANGE_CMR" : "MTN_MOMO_CMR", phoneNumber: parsed.data.phone, customerName: parsed.data.fullName, customerEmail: parsed.data.email, description: `Commande ${order.orderNumber} — DESCO MALL` });
+        payment = { id: kpay.id, reference: kpay.reference };
+      } else {
+        const fapshi: FapshiPaymentResponse = await initiateFapshiPayment({ amount: Math.round(total / 100), email: parsed.data.email, message: `Commande ${order.orderNumber} — DESCO MALL`, userId: order.id, redirectUrl: returnUrl });
+        payment = { id: fapshi.transferCode, reference: fapshi.transferCode, redirectUrl: fapshi.link };
+      }
     } catch (error) {
-      console.error("[checkout] Échec initialisation Fapshi", error);
+      console.error(`[checkout] Échec initialisation ${paymentProvider}`, error);
     }
 
     if (!payment) {
@@ -231,19 +216,15 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
     await db.order.update({
       where: { id: order.id },
       data: {
-        fapshiPaymentId: payment.transferCode,
-        fapshiPayUrl: payment.link,
-        paymentStatus: "PENDING_CONFIRMATION",
-        statusHistory: {
-          create: {
-            status: "PENDING",
-            note: "Redirection vers Fapshi",
-          },
-        },
+        ...(paymentProvider === "KPAY" ? { kpayPaymentId: payment.id, kpayReference: payment.reference } : { fapshiPaymentId: payment.id, fapshiPayUrl: payment.redirectUrl }),
       },
     });
+    await db.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({ where: { id: order.id, paymentStatus: "UNPAID" }, data: { paymentStatus: "PENDING_CONFIRMATION" } });
+      if (updated.count) await tx.orderStatusHistory.create({ data: { orderId: order.id, status: "PENDING", note: paymentProvider === "KPAY" ? "Demande Mobile Money envoyée" : "Redirection vers Fapshi" } });
+    });
 
-    return { ok: true, orderNumber: order.orderNumber, redirectUrl: payment.link };
+    return { ok: true, orderNumber: order.orderNumber, confirmationToken, redirectUrl: payment.redirectUrl };
   } catch (error) {
     console.error("[checkout] Création de commande impossible", error);
     return {
@@ -254,8 +235,25 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
   }
 }
 
-export async function getOrderForConfirmation(orderNumber: string): Promise<DemoOrder | null> {
-  return findDemoOrder(orderNumber) ?? null;
+export async function getOrderForConfirmation(orderNumber: string, confirmationToken?: string): Promise<OrderRecord | null> {
+  if (!hasDatabase) return null;
+  const session = await auth();
+  if (!session?.user?.id && !confirmationToken) return null;
+  const order = await db.order.findFirst({
+    where: { orderNumber, ...(confirmationToken ? { confirmationToken } : { userId: session!.user!.id }) },
+    include: { items: true, statusHistory: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!order) return null;
+  return {
+    id: order.id, orderNumber: order.orderNumber,
+    customerName: session?.user?.name ?? "Client DESCO", customerEmail: order.guestEmail ?? session?.user?.email ?? "",
+    customerPhone: order.guestPhone ?? "", city: order.shippingCity ?? "", neighborhood: order.shippingNeighborhood ?? "",
+    status: order.status, paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod === "ORANGE_MONEY" ? "ORANGE_MONEY" : "MTN_MOMO",
+    total: order.total, shippingFee: order.shippingFee, createdAt: order.createdAt.toISOString(),
+    items: order.items.map((item) => ({ productName: item.productName, variantInfo: item.variantInfo ?? undefined, imageUrl: item.imageUrl ?? undefined, quantity: item.quantity, unitPrice: item.unitPrice })),
+    timeline: order.statusHistory.map((entry) => ({ status: entry.status, note: entry.note ?? undefined, at: entry.createdAt.toISOString() })),
+  };
 }
 
 export { statusLabel };

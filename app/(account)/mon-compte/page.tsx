@@ -6,7 +6,7 @@ import { OrderStatusBadge } from "@/components/shared/order-status-badge";
 import { Button } from "@/components/ui/button";
 import { customerStats, getCustomerOrders } from "@/lib/account";
 import { auth } from "@/lib/auth";
-import { DEMO_CLIENT } from "@/lib/demo-data";
+import { db, hasDatabase } from "@/lib/db";
 import { formatDate, formatPrice } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -16,6 +16,8 @@ export const metadata: Metadata = {
 
 export default async function AccountPage() {
   const session = await auth();
+  const user = hasDatabase && session?.user?.id ? await db.user.findUnique({ where: { id: session.user.id }, include: { addresses: { where: { isDefault: true }, take: 1 } } }) : null;
+  const address = user?.addresses[0];
   const name = session?.user?.name ?? "Client DESCO";
   const email = session?.user?.email ?? "";
   const orders = await getCustomerOrders(email, session?.user?.id ?? "", name);
@@ -107,9 +109,9 @@ export default async function AccountPage() {
           <p className="mt-3 text-[12.5px] leading-relaxed text-ink-muted">
             {name}
             <br />
-            {DEMO_CLIENT.neighborhood}, {DEMO_CLIENT.city}
+            {[address?.neighborhood, address?.city].filter(Boolean).join(", ") || "Ajoutez une adresse de livraison"}
             <br />
-            {DEMO_CLIENT.phone}
+            {user?.phone ?? address?.phone ?? ""}
           </p>
           <Link
             href="/mes-informations"
@@ -140,7 +142,7 @@ export default async function AccountPage() {
       </div>
 
       <p className="mt-6 text-[11px] text-ink-faint">
-        Compte créé le {formatDate(DEMO_CLIENT.memberSince)} · {email}
+        Compte créé le {user ? formatDate(user.createdAt.toISOString()) : ""} · {email}
       </p>
     </div>
   );

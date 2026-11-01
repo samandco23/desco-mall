@@ -68,15 +68,20 @@ export async function updateOrderStatus(input: {
   }
 
   if (!hasDatabase) {
-    return {
-      ok: true,
-      message: `Statut passé à « ${STATUS_LABELS[parsed.data.status]} » (démonstration, non persisté).`,
-    };
+    return { ok: false, message: "Le service de gestion des commandes est momentanément indisponible." };
   }
 
   try {
+    const currentOrder = await db.order.findUnique({ where: { id: parsed.data.orderId }, select: { paymentStatus: true } });
+    if (!currentOrder) return { ok: false, message: "Commande introuvable." };
+    if (["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(parsed.data.status) && currentOrder.paymentStatus !== "PAID") {
+      return { ok: false, message: "Le statut ne peut pas avancer avant la confirmation du paiement." };
+    }
     const order = await db.order.update({
-      where: { id: parsed.data.orderId },
+      where: {
+        id: parsed.data.orderId,
+        ...(["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(parsed.data.status) ? { paymentStatus: "PAID" } : {}),
+      },
       data: {
         status: parsed.data.status,
         statusHistory: {
@@ -108,6 +113,7 @@ const settingsSchema = z.object({
   shopEmail: z.string().trim().email("Email invalide."),
   shopPhone: z.string().trim().min(6, "Téléphone requis."),
   shopAddress: z.string().trim().min(5, "Adresse requise."),
+  paymentProvider: z.enum(["FAPSHI", "KPAY"]),
 });
 
 export async function saveSettings(input: z.infer<typeof settingsSchema>): Promise<AdminActionResult> {
@@ -121,8 +127,8 @@ export async function saveSettings(input: z.infer<typeof settingsSchema>): Promi
 
   if (!hasDatabase) {
     return {
-      ok: true,
-      message: "Paramètres validés. Connectez Neon pour les enregistrer durablement.",
+      ok: false,
+      message: "Le service de paramètres est momentanément indisponible.",
     };
   }
 
@@ -132,6 +138,7 @@ export async function saveSettings(input: z.infer<typeof settingsSchema>): Promi
       ["shop.email", parsed.data.shopEmail],
       ["shop.phone", parsed.data.shopPhone],
       ["shop.address", parsed.data.shopAddress],
+      ["payment.provider", parsed.data.paymentProvider],
     ] as const;
 
     await Promise.all(
@@ -188,12 +195,7 @@ export async function saveProduct(input: AdminProductInput): Promise<AdminAction
   }
 
   if (!hasDatabase) {
-    return {
-      ok: true,
-      message: parsed.data.id
-        ? "Produit mis à jour (démonstration, non persisté)."
-        : "Produit enregistré (démonstration, non persisté).",
-    };
+    return { ok: false, message: "Le service catalogue est momentanément indisponible." };
   }
 
   try {

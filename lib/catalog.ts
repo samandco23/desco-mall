@@ -1,5 +1,4 @@
-import { demoCategories, demoOrders, demoProducts } from "@/lib/demo-data";
-import type { CatalogCategory, CatalogProduct, DemoOrder } from "@/lib/types";
+import type { CatalogCategory, CatalogProduct } from "@/lib/types";
 import { hasDatabase } from "@/lib/db";
 
 export type ProductFilters = {
@@ -17,7 +16,7 @@ const byNewest = (a: CatalogProduct, b: CatalogProduct) =>
   new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
 async function loadProducts(): Promise<CatalogProduct[]> {
-  if (!hasDatabase) return process.env.NODE_ENV === "production" ? [] : demoProducts;
+  if (!hasDatabase) return [];
 
   try {
     const { db } = await import("@/lib/db");
@@ -31,8 +30,6 @@ async function loadProducts(): Promise<CatalogProduct[]> {
       },
       orderBy: { createdAt: "desc" },
     });
-
-    if (rows.length === 0) return process.env.NODE_ENV === "production" ? [] : demoProducts;
 
     return rows.map((row) => {
       const sizes = Array.from(
@@ -83,8 +80,8 @@ async function loadProducts(): Promise<CatalogProduct[]> {
       } satisfies CatalogProduct;
     });
   } catch (error) {
-    console.error("[catalog] Lecture Prisma impossible, catalogue de démonstration utilisé.", error);
-    return process.env.NODE_ENV === "production" ? [] : demoProducts;
+    console.error("[catalog] Lecture Prisma impossible.", error);
+    return [];
   }
 }
 
@@ -181,11 +178,15 @@ export async function getRelatedProducts(
 }
 
 export async function getCategories(): Promise<CatalogCategory[]> {
-  const products = await loadProducts();
-  return demoCategories.map((category) => ({
-    ...category,
-    productCount: products.filter((product) => product.category.slug === category.slug).length,
-  }));
+  if (!hasDatabase) return [];
+  try {
+    const { db } = await import("@/lib/db");
+    const categories = await db.category.findMany({ where: { isActive: true }, include: { _count: { select: { products: { where: { isActive: true } } } } }, orderBy: { position: "asc" } });
+    return categories.map((category) => ({ name: category.name, slug: category.slug, description: category.description ?? "", image: category.imageUrl ?? "", productCount: category._count.products }));
+  } catch (error) {
+    console.error("[catalog] Lecture des catégories impossible.", error);
+    return [];
+  }
 }
 
 export async function getCategoryBySlug(slug: string): Promise<CatalogCategory | null> {
@@ -195,18 +196,4 @@ export async function getCategoryBySlug(slug: string): Promise<CatalogCategory |
 
 export async function searchCatalog(query: string): Promise<CatalogProduct[]> {
   return getProducts({ search: query });
-}
-
-export function getDemoOrders(): DemoOrder[] {
-  return [...demoOrders].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-}
-
-export function getDemoOrderByNumber(orderNumber: string): DemoOrder | undefined {
-  return demoOrders.find((order) => order.orderNumber === orderNumber);
-}
-
-export function getDemoOrdersForCustomer(email: string): DemoOrder[] {
-  return getDemoOrders().filter((order) => order.customerEmail === email);
 }

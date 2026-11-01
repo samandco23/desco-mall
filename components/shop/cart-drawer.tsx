@@ -13,8 +13,6 @@ import { formatPrice } from "@/lib/utils";
 import { unitPriceFor } from "@/lib/wholesale";
 import { cartSubtotal, useCartStore } from "@/store/cart-store";
 
-export const FREE_SHIPPING_THRESHOLD = 5_000_000;
-
 export function CartDrawer() {
   const pathname = usePathname();
   const mounted = useMounted();
@@ -23,7 +21,6 @@ export function CartDrawer() {
   const items = useCartStore((state) => state.items);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
-  const discountPercent = useCartStore((state) => state.discountPercent);
 
   useEffect(() => {
     closeCart();
@@ -46,10 +43,7 @@ export function CartDrawer() {
   if (!mounted || !isOpen) return null;
 
   const subtotal = cartSubtotal(items);
-  const discount = Math.round((subtotal * discountPercent) / 100);
-  const total = subtotal - discount;
-  const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-  const progress = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
+  const total = subtotal;
 
   return (
     <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Panier">
@@ -92,24 +86,7 @@ export function CartDrawer() {
         ) : (
           <>
             <div className="border-b border-ink-line px-5 py-3">
-              <p className="text-[11.5px] text-ink-muted">
-                {remaining > 0 ? (
-                  <>
-                    Plus que <strong className="text-brand-black">{formatPrice(remaining)}</strong> pour la
-                    livraison offerte à Douala et Yaoundé.
-                  </>
-                ) : (
-                  <span className="font-semibold text-brand-success">
-                    Livraison offerte à Douala et Yaoundé.
-                  </span>
-                )}
-              </p>
-              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-paper-tint">
-                <div
-                  className="h-full rounded-full bg-brand-black transition-all duration-500"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
+              <p className="text-[11.5px] text-ink-muted">Frais de livraison calculés à l’étape de paiement.</p>
             </div>
 
             <ul className="flex-1 divide-y divide-ink-line overflow-y-auto px-5">
@@ -164,12 +141,6 @@ export function CartDrawer() {
                 <span>Sous-total</span>
                 <span className="font-semibold text-brand-black">{formatPrice(subtotal)}</span>
               </div>
-              {discount > 0 && (
-                <div className="mt-1 flex items-center justify-between text-[13px] text-brand-accent">
-                  <span>Remise ({discountPercent} %)</span>
-                  <span className="font-semibold">−{formatPrice(discount)}</span>
-                </div>
-              )}
               <p className="mt-1 text-[11px] text-ink-faint">
                 Frais de livraison calculés au paiement.
               </p>

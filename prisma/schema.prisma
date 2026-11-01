@@ -17,6 +17,7 @@ model User {
   emailVerified  DateTime?
   name           String?
   phone          String?
+  preferredPaymentMethod String?
   passwordHash   String?
   role           Role      @default(USER)
   brevoContactId String?
@@ -243,6 +244,7 @@ model WishlistItem {
 model Order {
   id              String               @id @default(cuid())
   orderNumber     String               @unique @default(cuid())
+  confirmationToken String?             @unique
   userId          String?
   guestEmail      String?
   guestPhone      String?
@@ -250,8 +252,11 @@ model Order {
   status          OrderStatus          @default(PENDING)
   paymentStatus   PaymentStatus        @default(UNPAID)
   paymentMethod   String               @default("FAPSHI")
+  paymentProvider String               @default("FAPSHI")
   fapshiPaymentId String?
   fapshiPayUrl    String?
+  kpayPaymentId   String?
+  kpayReference   String?
   subtotal        Int
   shippingFee     Int                  @default(0)
   discount        Int                  @default(0)
@@ -259,6 +264,7 @@ model Order {
   notes           String?
   trackingNumber  String?
   shippingCity    String?
+  shippingNeighborhood String?
   deliveryAt      DateTime?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt

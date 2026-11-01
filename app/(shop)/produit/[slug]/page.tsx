@@ -8,6 +8,7 @@ import { ProductPurchasePanel } from "@/components/shop/product-purchase-panel";
 import { ProductTabs } from "@/components/shop/product-tabs";
 import { SectionHeading } from "@/components/shared/section-heading";
 import { getProductBySlug, getRelatedProducts, getProducts } from "@/lib/catalog";
+import { getPublicBaseUrl } from "@/lib/site-url";
 
 export const revalidate = 86400;
 
@@ -40,7 +41,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
   if (!product) notFound();
 
   const related = await getRelatedProducts(product, 4);
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = getPublicBaseUrl();
 
   const jsonLd = {
     "@context": "https://schema.org",

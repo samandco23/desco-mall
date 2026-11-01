@@ -43,5 +43,5 @@ export type CheckoutInput = z.infer<typeof checkoutSchema>;
 export type CartLineInput = z.infer<typeof cartLineSchema>;
 
 export type CheckoutResult =
-  | { ok: true; orderNumber: string; redirectUrl?: string }
+  | { ok: true; orderNumber: string; confirmationToken: string; redirectUrl?: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };

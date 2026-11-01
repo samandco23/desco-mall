@@ -3,11 +3,13 @@
 import { AuthError } from "next-auth";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 import { signIn, signOut } from "@/lib/auth";
 import { db, hasDatabase } from "@/lib/db";
 import { upsertBrevoContact } from "@/lib/brevo";
 import { registerSchema } from "@/lib/validations/user";
+import { getPublicBaseUrl } from "@/lib/site-url";
 
 function safeCallback(value: FormDataEntryValue | null): string {
   const raw = typeof value === "string" ? value : "/mon-compte";
@@ -19,7 +21,7 @@ export async function loginAction(formData: FormData): Promise<string | undefine
     await signIn("credentials", {
       email: String(formData.get("email") ?? "").trim(),
       password: String(formData.get("password") ?? ""),
-      redirectTo: safeCallback(formData.get("callbackUrl")),
+      redirectTo: new URL(safeCallback(formData.get("callbackUrl")), getPublicBaseUrl(await headers())).toString(),
     });
     return undefined;
   } catch (error) {
@@ -47,7 +49,7 @@ export async function registerAction(formData: FormData): Promise<string | undef
   }
 
   if (!hasDatabase) {
-    return "La base de données n'est pas encore connectée. Utilisez le compte démo client@descomall.cm / client123 pour explorer l'espace client.";
+    return "Le service de compte est momentanément indisponible. Réessayez plus tard.";
   }
 
   const email = parsed.data.email.toLowerCase();

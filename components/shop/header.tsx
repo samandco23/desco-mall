@@ -109,7 +109,7 @@ export function Header() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-50 border-b border-ink-line bg-white">
+      <header className="sticky top-0 z-50 border-b border-ink-line/80 bg-[#faf9f6]/95 backdrop-blur-md">
         <div className="container-shop flex h-16 items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
@@ -125,7 +125,7 @@ export function Header() {
 
           <nav
             aria-label="Navigation principale"
-            className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 min-[950px]:flex"
+            className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-4 min-[950px]:flex xl:gap-5"
           >
             {NAV_LINKS.map((link) => {
               const active =

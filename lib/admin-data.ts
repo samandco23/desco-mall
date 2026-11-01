@@ -1,259 +1,82 @@
-import { demoOrders, demoProducts } from "@/lib/demo-data";
-import type { DemoOrder, OrderStatus, PaymentStatus } from "@/lib/types";
-import { shippingFeeFor } from "@/lib/utils";
+import type { OrderRecord, OrderStatus } from "@/lib/types";
+import { db, hasDatabase } from "@/lib/db";
 
-const CUSTOMERS = [
-  { name: "Aïcha Ngo Bell", email: "client@descomall.cm", phone: "+237 655 234 118", city: "Douala", neighborhood: "Bonapriso" },
-  { name: "Jean-Marc Fotso", email: "jm.fotso@example.cm", phone: "+237 699 872 004", city: "Yaoundé", neighborhood: "Bastos" },
-  { name: "Clarisse Mbarga", email: "clarisse.mbarga@example.cm", phone: "+237 675 001 922", city: "Douala", neighborhood: "Akwa" },
-  { name: "Boris Talla", email: "boris.talla@example.cm", phone: "+237 690 443 108", city: "Bafoussam", neighborhood: "Tamdja" },
-  { name: "Nadège Tchoumi", email: "nadege.tchoumi@example.cm", phone: "+237 651 908 774", city: "Douala", neighborhood: "Bonamoussadi" },
-  { name: "Mireille Kamga", email: "mireille.kamga@example.cm", phone: "+237 677 118 503", city: "Yaoundé", neighborhood: "Odza" },
-  { name: "Yannick Abena", email: "yannick.abena@example.cm", phone: "+237 656 007 341", city: "Douala", neighborhood: "Deido" },
-  { name: "Sandrine Etoundi", email: "sandrine.etoundi@example.cm", phone: "+237 691 552 870", city: "Yaoundé", neighborhood: "Mvog-Mbi" },
-  { name: "Loïc Mballa", email: "loic.mballa@example.cm", phone: "+237 658 334 902", city: "Douala", neighborhood: "Makepe" },
-  { name: "Estelle Nana", email: "estelle.nana@example.cm", phone: "+237 678 220 611", city: "Buea", neighborhood: "Molyko" },
-] as const;
-
-const STATUS_CYCLE: OrderStatus[] = [
-  "DELIVERED",
-  "PAID",
-  "SHIPPED",
-  "PROCESSING",
-  "DELIVERED",
-  "PENDING",
-  "CANCELLED",
-  "DELIVERED",
-];
-
-const PAYMENT_BY_STATUS: Record<OrderStatus, PaymentStatus> = {
-  PENDING: "PENDING_CONFIRMATION",
-  PAID: "PAID",
-  PROCESSING: "PAID",
-  SHIPPED: "PAID",
-  DELIVERED: "PAID",
-  CANCELLED: "FAILED",
-  REFUNDED: "REFUNDED",
-};
-
-function isoDaysAgo(days: number, hour: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  date.setHours(hour, 15, 0, 0);
-  return date.toISOString();
-}
-
-const GENERATED_ORDERS: DemoOrder[] = Array.from({ length: 30 }, (_, index) => {
-  const customer = CUSTOMERS[index % CUSTOMERS.length] ?? CUSTOMERS[0]!;
-  const product = demoProducts[(index * 5) % demoProducts.length] ?? demoProducts[0]!;
-  const status = STATUS_CYCLE[index % STATUS_CYCLE.length] ?? "DELIVERED";
-  const quantity = index % 4 === 0 ? 2 : 1;
-  const size = product.sizes[index % product.sizes.length] ?? "M";
-  const color = product.colors[0]?.name ?? "Noir";
-  const shippingFee = shippingFeeFor(customer.city);
-  const createdAt = isoDaysAgo(index, 9 + (index % 9));
-  const paymentStatus = PAYMENT_BY_STATUS[status];
-
+function toOrderRecord(row: {
+  id: string; orderNumber: string; createdAt: Date; status: OrderStatus; paymentStatus: OrderRecord["paymentStatus"];
+  paymentMethod: string; total: number; shippingFee: number; guestEmail: string | null; guestPhone: string | null;
+  shippingCity: string | null; user: { name: string | null; email: string; phone: string | null } | null;
+  address: { fullName: string; phone: string; city: string; neighborhood: string } | null;
+  items: { productName: string; variantInfo: string | null; imageUrl: string | null; quantity: number; unitPrice: number }[];
+  statusHistory: { status: OrderStatus; note: string | null; createdAt: Date }[];
+}): OrderRecord {
   return {
-    id: `ord_gen_${index + 1}`,
-    orderNumber: `DM-2026-${2060 + index}`,
-    customerName: customer.name,
-    customerEmail: customer.email,
-    customerPhone: customer.phone,
-    city: customer.city,
-    neighborhood: customer.neighborhood,
-    status,
-    paymentStatus,
-    paymentMethod: index % 2 === 0 ? "MTN_MOMO" : "ORANGE_MONEY",
-    total: product.price * quantity + shippingFee,
-    shippingFee,
-    items: [
-      {
-        productName: product.name,
-        variantInfo: `Taille: ${size}, Couleur: ${color}`,
-        imageUrl: product.images[0]?.url,
-        quantity,
-        unitPrice: product.price,
-      },
-    ],
-    createdAt,
-    timeline: [
-      { status: "PENDING", note: "Commande créée", at: createdAt },
-      ...(paymentStatus === "PAID"
-        ? [{ status: "PAID" as OrderStatus, note: "Paiement Mobile Money confirmé", at: createdAt }]
-        : []),
-    ],
+    id: row.id, orderNumber: row.orderNumber,
+    customerName: row.address?.fullName ?? row.user?.name ?? "Client",
+    customerEmail: row.user?.email ?? row.guestEmail ?? "",
+    customerPhone: row.address?.phone ?? row.user?.phone ?? row.guestPhone ?? "",
+    city: row.address?.city ?? row.shippingCity ?? "", neighborhood: row.address?.neighborhood ?? "",
+    status: row.status, paymentStatus: row.paymentStatus,
+    paymentMethod: row.paymentMethod === "ORANGE_MONEY" ? "ORANGE_MONEY" : "MTN_MOMO",
+    total: row.total, shippingFee: row.shippingFee, createdAt: row.createdAt.toISOString(),
+    items: row.items.map((item) => ({ productName: item.productName, variantInfo: item.variantInfo ?? undefined, imageUrl: item.imageUrl ?? undefined, quantity: item.quantity, unitPrice: item.unitPrice })),
+    timeline: row.statusHistory.map((entry) => ({ status: entry.status, note: entry.note ?? undefined, at: entry.createdAt.toISOString() })),
   };
-});
-
-export function getAdminOrders(): DemoOrder[] {
-  return [...demoOrders, ...GENERATED_ORDERS].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
 }
 
-export function getAdminOrder(idOrNumber: string): DemoOrder | undefined {
-  return getAdminOrders().find(
-    (order) => order.id === idOrNumber || order.orderNumber === idOrNumber
-  );
+const orderInclude = { items: true, statusHistory: { orderBy: { createdAt: "asc" as const } }, user: true, address: true };
+
+export async function getAdminOrders(): Promise<OrderRecord[]> {
+  if (!hasDatabase) return [];
+  const rows = await db.order.findMany({ include: orderInclude, orderBy: { createdAt: "desc" } });
+  return rows.map(toOrderRecord);
 }
 
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+export async function getAdminOrder(idOrNumber: string): Promise<OrderRecord | undefined> {
+  if (!hasDatabase) return undefined;
+  const row = await db.order.findFirst({ where: { OR: [{ id: idOrNumber }, { orderNumber: idOrNumber }] }, include: orderInclude });
+  return row ? toOrderRecord(row) : undefined;
 }
 
-function sumRevenue(orders: DemoOrder[]): number {
-  return orders
-    .filter((order) => order.paymentStatus === "PAID")
-    .reduce((sum, order) => sum + order.total, 0);
-}
-
-function percentChange(current: number, previous: number): number | null {
-  if (previous === 0) return current > 0 ? 100 : null;
-  return Math.round(((current - previous) / previous) * 100);
-}
+function startOfMonth(date: Date): Date { return new Date(date.getFullYear(), date.getMonth(), 1); }
+function sumRevenue(orders: OrderRecord[]): number { return orders.filter((order) => order.paymentStatus === "PAID").reduce((sum, order) => sum + order.total, 0); }
+function percentChange(current: number, previous: number): number | null { if (previous === 0) return current > 0 ? 100 : null; return Math.round(((current - previous) / previous) * 100); }
 
 export type RevenuePoint = { date: string; label: string; revenue: number; orders: number };
-
-export function getRevenueSeries(days = 30): RevenuePoint[] {
-  const orders = getAdminOrders();
+export async function getRevenueSeries(days = 30): Promise<RevenuePoint[]> {
+  const orders = await getAdminOrders();
   const points: RevenuePoint[] = [];
-
   for (let index = days - 1; index >= 0; index -= 1) {
-    const day = new Date();
-    day.setDate(day.getDate() - index);
+    const day = new Date(); day.setDate(day.getDate() - index);
     const key = day.toISOString().slice(0, 10);
-    const dayOrders = orders.filter(
-      (order) => order.createdAt.slice(0, 10) === key && order.paymentStatus === "PAID"
-    );
-    points.push({
-      date: key,
-      label: new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(day),
-      revenue: dayOrders.reduce((sum, order) => sum + order.total, 0),
-      orders: dayOrders.length,
-    });
+    const rows = orders.filter((order) => order.createdAt.slice(0, 10) === key && order.paymentStatus === "PAID");
+    points.push({ date: key, label: new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(day), revenue: rows.reduce((sum, order) => sum + order.total, 0), orders: rows.length });
   }
-
   return points;
 }
 
-export function getAdminStats() {
-  const orders = getAdminOrders();
-  const now = new Date();
-  const monthStart = startOfMonth(now);
-  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
+export async function getAdminStats() {
+  const [orders, variants] = await Promise.all([
+    getAdminOrders(),
+    hasDatabase ? db.productVariant.findMany({ where: { stock: { lte: 5 } }, include: { product: { include: { images: { orderBy: { position: "asc" }, take: 1 } } } }, orderBy: { stock: "asc" }, take: 100 }) : Promise.resolve([]),
+  ]);
+  const now = new Date(); const monthStart = startOfMonth(now); const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const monthOrders = orders.filter((order) => new Date(order.createdAt) >= monthStart);
-  const previousMonthOrders = orders.filter((order) => {
-    const created = new Date(order.createdAt);
-    return created >= previousMonthStart && created < monthStart;
-  });
-
-  const revenueThisMonth = sumRevenue(monthOrders);
-  const revenuePreviousMonth = sumRevenue(previousMonthOrders);
-  const paidOrders = orders.filter((order) => order.paymentStatus === "PAID");
-
-  const statusCounts = orders.reduce<Record<OrderStatus, number>>(
-    (accumulator, order) => {
-      accumulator[order.status] = (accumulator[order.status] ?? 0) + 1;
-      return accumulator;
-    },
-    {
-      PENDING: 0,
-      PAID: 0,
-      PROCESSING: 0,
-      SHIPPED: 0,
-      DELIVERED: 0,
-      CANCELLED: 0,
-      REFUNDED: 0,
-    }
-  );
-
-  const lowStock = demoProducts.flatMap((product) =>
-    Object.entries(product.stock)
-      .filter(([, stock]) => stock <= 5)
-      .map(([size, stock]) => ({
-        productId: product.id,
-        name: product.name,
-        slug: product.slug,
-        image: product.images[0]?.url ?? "",
-        size,
-        stock,
-      }))
-  );
-
-  const topProducts = Object.values(
-    orders.reduce<Record<string, { name: string; quantity: number; revenue: number; image: string }>>(
-      (accumulator, order) => {
-        for (const item of order.items) {
-          const existing = accumulator[item.productName] ?? {
-            name: item.productName,
-            quantity: 0,
-            revenue: 0,
-            image: item.imageUrl ?? "",
-          };
-          existing.quantity += item.quantity;
-          existing.revenue += item.unitPrice * item.quantity;
-          accumulator[item.productName] = existing;
-        }
-        return accumulator;
-      },
-      {}
-    )
-  )
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-
-  return {
-    revenueThisMonth,
-    revenueGrowth: percentChange(revenueThisMonth, revenuePreviousMonth),
-    monthOrders: monthOrders.length,
-    orderGrowth: percentChange(monthOrders.length, previousMonthOrders.length),
-    averageBasket: paidOrders.length > 0
-      ? Math.round(paidOrders.reduce((sum, order) => sum + order.total, 0) / paidOrders.length)
-      : 0,
-    ordersToProcess: statusCounts.PENDING + statusCounts.PAID + statusCounts.PROCESSING,
-    lowStockCount: lowStock.length,
-    statusCounts,
-    lowStock: lowStock.slice(0, 6),
-    topProducts,
-    totalOrders: orders.length,
-  };
+  const previousOrders = orders.filter((order) => { const date = new Date(order.createdAt); return date >= prevStart && date < monthStart; });
+  const paid = orders.filter((order) => order.paymentStatus === "PAID");
+  const statusCounts = orders.reduce<Record<OrderStatus, number>>((acc, order) => { acc[order.status] += 1; return acc; }, { PENDING: 0, PAID: 0, PROCESSING: 0, SHIPPED: 0, DELIVERED: 0, CANCELLED: 0, REFUNDED: 0 });
+  const lowStock = variants.map((entry) => ({ productId: entry.productId, name: entry.product.name, slug: entry.product.slug, image: entry.product.images[0]?.url ?? "", size: entry.size ?? "TU", stock: entry.stock }));
+  const topProducts = Object.values(orders.filter((order) => order.paymentStatus === "PAID").flatMap((order) => order.items).reduce<Record<string, { name: string; quantity: number; revenue: number; image: string }>>((acc, item) => { const value = acc[item.productName] ?? { name: item.productName, quantity: 0, revenue: 0, image: item.imageUrl ?? "" }; value.quantity += item.quantity; value.revenue += item.unitPrice * item.quantity; acc[item.productName] = value; return acc; }, {})).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  return { revenueThisMonth: sumRevenue(monthOrders), revenueGrowth: percentChange(sumRevenue(monthOrders), sumRevenue(previousOrders)), monthOrders: monthOrders.length, orderGrowth: percentChange(monthOrders.length, previousOrders.length), averageBasket: paid.length ? Math.round(paid.reduce((sum, order) => sum + order.total, 0) / paid.length) : 0, ordersToProcess: statusCounts.PENDING + statusCounts.PAID + statusCounts.PROCESSING, lowStockCount: lowStock.length, statusCounts, lowStock: lowStock.slice(0, 6), topProducts, totalOrders: orders.length };
 }
 
-export type AdminCustomer = {
-  name: string;
-  email: string;
-  phone: string;
-  city: string;
-  orderCount: number;
-  totalSpent: number;
-  lastOrderAt: string;
-};
-
-export function getAdminCustomers(): AdminCustomer[] {
-  const map = new Map<string, AdminCustomer>();
-  for (const order of getAdminOrders()) {
-    const existing = map.get(order.customerEmail);
-    if (existing) {
-      existing.orderCount += 1;
-      if (order.paymentStatus === "PAID") existing.totalSpent += order.total;
-      if (new Date(order.createdAt) > new Date(existing.lastOrderAt)) {
-        existing.lastOrderAt = order.createdAt;
-      }
-    } else {
-      map.set(order.customerEmail, {
-        name: order.customerName,
-        email: order.customerEmail,
-        phone: order.customerPhone,
-        city: order.city,
-        orderCount: 1,
-        totalSpent: order.paymentStatus === "PAID" ? order.total : 0,
-        lastOrderAt: order.createdAt,
-      });
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+export type AdminCustomer = { name: string; email: string; phone: string; city: string; orderCount: number; totalSpent: number; lastOrderAt: string };
+export async function getAdminCustomers(): Promise<AdminCustomer[]> {
+  if (!hasDatabase) return [];
+  const users = await db.user.findMany({ where: { role: "USER" }, include: { addresses: { where: { isDefault: true }, take: 1 }, orders: { include: { items: true }, orderBy: { createdAt: "desc" } } } });
+  return users.map((user) => {
+    const paidOrders = user.orders.filter((order) => order.paymentStatus === "PAID");
+    return { name: user.name ?? "Client", email: user.email, phone: user.phone ?? user.addresses[0]?.phone ?? "", city: user.addresses[0]?.city ?? "", orderCount: user.orders.length, totalSpent: paidOrders.reduce((sum, order) => sum + order.total, 0), lastOrderAt: user.orders[0]?.createdAt.toISOString() ?? user.createdAt.toISOString() };
+  }).sort((a, b) => b.totalSpent - a.totalSpent);
 }
 
-export type LowStockItem = ReturnType<typeof getAdminStats>["lowStock"][number];
+export type LowStockItem = Awaited<ReturnType<typeof getAdminStats>>["lowStock"][number];

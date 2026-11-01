@@ -3,7 +3,7 @@ import { ShieldCheck } from "lucide-react";
 
 import { ProfileForm } from "@/components/account/profile-form";
 import { auth } from "@/lib/auth";
-import { DEMO_CLIENT } from "@/lib/demo-data";
+import { db, hasDatabase } from "@/lib/db";
 
 export const metadata: Metadata = {
   title: "Mes informations",
@@ -12,8 +12,10 @@ export const metadata: Metadata = {
 
 export default async function InformationsPage() {
   const session = await auth();
-  const name = session?.user?.name ?? DEMO_CLIENT.name;
-  const email = session?.user?.email ?? DEMO_CLIENT.email;
+  const user = hasDatabase && session?.user?.id ? await db.user.findUnique({ where: { id: session.user.id }, include: { addresses: { where: { isDefault: true }, take: 1 } } }) : null;
+  const address = user?.addresses[0];
+  const name = user?.name ?? session?.user?.name ?? "";
+  const email = user?.email ?? session?.user?.email ?? "";
 
   return (
     <div>
@@ -28,9 +30,9 @@ export default async function InformationsPage() {
         <ProfileForm
           name={name}
           email={email}
-          phone={DEMO_CLIENT.phone}
-          city={DEMO_CLIENT.city}
-          neighborhood={DEMO_CLIENT.neighborhood}
+          phone={user?.phone ?? address?.phone ?? ""}
+          city={address?.city ?? "Douala"}
+          neighborhood={address?.neighborhood ?? ""}
         />
       </div>
 

@@ -54,7 +54,7 @@ export type PaymentStatus =
   | "FAILED"
   | "REFUNDED";
 
-export type DemoOrderItem = {
+export type OrderItemRecord = {
   productName: string;
   variantInfo?: string;
   imageUrl?: string;
@@ -62,7 +62,7 @@ export type DemoOrderItem = {
   unitPrice: number;
 };
 
-export type DemoOrder = {
+export type OrderRecord = {
   id: string;
   orderNumber: string;
   customerName: string;
@@ -75,7 +75,7 @@ export type DemoOrder = {
   paymentMethod: "MTN_MOMO" | "ORANGE_MONEY";
   total: number;
   shippingFee: number;
-  items: DemoOrderItem[];
+  items: OrderItemRecord[];
   createdAt: string;
   timeline: { status: OrderStatus; note?: string; at: string }[];
 };

@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default function AdminOrderDetailPage({ params }: { params: { id: string } }) {
-  const order = getAdminOrder(params.id);
+export default async function AdminOrderDetailPage({ params }: { params: { id: string } }) {
+  const order = await getAdminOrder(params.id);
   if (!order) notFound();
 
   return (
