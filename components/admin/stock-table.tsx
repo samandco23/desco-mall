@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -15,8 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { updateVariantStock } from "@/lib/actions/admin";
 
 export type StockRow = {
+  variantId: string;
+  sku: string;
   productId: string;
   name: string;
   slug: string;
@@ -29,13 +32,24 @@ export type StockRow = {
 export function StockTable({ rows }: { rows: StockRow[] }) {
   const [query, setQuery] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  async function saveStock(variantId: string, value: number, sku: string) {
+    setPendingId(variantId);
+    setMessage("");
+    const result = await updateVariantStock({ variantId, stock: value, sku });
+    setMessage(result.message);
+    setPendingId(null);
+    if (result.ok) window.location.reload();
+  }
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return rows.filter((row) => {
       if (lowOnly && row.stock > 5) return false;
       if (!needle) return true;
-      return `${row.name} ${row.slug} ${row.size} ${row.category}`
+      return `${row.name} ${row.slug} ${row.size} ${row.category} ${row.sku}`
         .toLowerCase()
         .includes(needle);
     });
@@ -71,6 +85,7 @@ export function StockTable({ rows }: { rows: StockRow[] }) {
             <TableHead>Produit</TableHead>
             <TableHead>Catégorie</TableHead>
             <TableHead>Taille</TableHead>
+            <TableHead>SKU externe</TableHead>
             <TableHead>Stock</TableHead>
             <TableHead>État</TableHead>
             <TableHead className="text-right">Ajuster</TableHead>
@@ -78,7 +93,7 @@ export function StockTable({ rows }: { rows: StockRow[] }) {
         </TableHeader>
         <TableBody>
           {filtered.map((row) => (
-            <TableRow key={`${row.productId}-${row.size}`}>
+            <TableRow key={row.variantId}>
               <TableCell>
                 <div className="flex items-center gap-2.5">
                   <div className="relative h-10 w-8 shrink-0 overflow-hidden rounded-sm bg-paper-tint">
@@ -94,6 +109,7 @@ export function StockTable({ rows }: { rows: StockRow[] }) {
               </TableCell>
               <TableCell className="text-ink-muted">{row.category}</TableCell>
               <TableCell className="font-medium">{row.size}</TableCell>
+              <TableCell><input aria-label={`SKU externe ${row.name} ${row.size}`} defaultValue={row.sku === "—" ? "" : row.sku} placeholder="SKU externe" id={`sku-${row.variantId}`} className="h-8 w-32 rounded border border-ink-line px-2 text-xs" /></TableCell>
               <TableCell>{row.stock}</TableCell>
               <TableCell>
                 <span
@@ -110,24 +126,29 @@ export function StockTable({ rows }: { rows: StockRow[] }) {
                 </span>
               </TableCell>
               <TableCell className="text-right">
-                <Link
-                  href={`/admin/produits/${row.productId}`}
-                  className="text-[11px] font-medium underline-offset-4 hover:underline"
-                >
-                  Modifier
-                </Link>
+                <div className="flex items-center justify-end gap-2">
+                  <input aria-label={`Stock ${row.name} ${row.size}`} type="number" min="0" defaultValue={row.stock} id={`stock-${row.variantId}`} className="h-8 w-20 rounded border border-ink-line px-2 text-right text-xs" />
+                  <button type="button" disabled={pendingId === row.variantId} onClick={() => {
+                    const input = document.getElementById(`stock-${row.variantId}`) as HTMLInputElement | null;
+                    const skuInput = document.getElementById(`sku-${row.variantId}`) as HTMLInputElement | null;
+                    if (input) void saveStock(row.variantId, Number(input.value), skuInput?.value ?? "");
+                  }} className="text-[11px] font-medium underline-offset-4 hover:underline disabled:opacity-50">
+                    {pendingId === row.variantId ? <Loader2 className="h-3 w-3 animate-spin" /> : "Enregistrer"}
+                  </button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
           {filtered.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="py-10 text-center text-[12px] text-ink-muted">
+              <TableCell colSpan={7} className="py-10 text-center text-[12px] text-ink-muted">
                 Aucune variante ne correspond à ces filtres.
               </TableCell>
             </TableRow>
           )}
         </TableBody>
       </Table>
+      {message && <p role="status" className="border-t border-ink-line px-4 py-2 text-xs">{message}</p>}
       <p className="border-t border-ink-line px-4 py-2.5 text-[10.5px] text-ink-faint">
         {filtered.length} variante{filtered.length > 1 ? "s" : ""} affichée
         {filtered.length > 1 ? "s" : ""} sur {rows.length}

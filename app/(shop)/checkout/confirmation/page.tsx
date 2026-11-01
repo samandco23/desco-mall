@@ -55,7 +55,7 @@ const STATUS_RANK: Record<OrderStatus, number> = {
   REFUNDED: 0,
 };
 
-async function loadOrder(orderNumber: string): Promise<ConfirmationOrder | null> {
+async function loadOrder(orderNumber: string, userId?: string): Promise<ConfirmationOrder | null> {
   const demo = findDemoOrder(orderNumber) ?? getDemoOrderByNumber(orderNumber);
   if (demo) {
     return {
@@ -77,8 +77,9 @@ async function loadOrder(orderNumber: string): Promise<ConfirmationOrder | null>
   if (!hasDatabase) return null;
 
   try {
-    const order = await db.order.findUnique({
-      where: { orderNumber },
+    if (!userId) return null;
+    const order = await db.order.findFirst({
+      where: { orderNumber, userId },
       include: { items: true },
     });
     if (!order) return null;
@@ -114,7 +115,7 @@ export default async function ConfirmationPage({
   searchParams: { order?: string };
 }) {
   const session = await auth();
-  const order = searchParams.order ? await loadOrder(searchParams.order) : null;
+  const order = searchParams.order ? await loadOrder(searchParams.order, session?.user?.id) : null;
   const currentRank = order ? STATUS_RANK[order.status] : 1;
 
   return (
@@ -127,7 +128,7 @@ export default async function ConfirmationPage({
         </span>
         <p className="eyebrow mt-5">Étape 3 sur 3</p>
         <h1 className="mt-2 text-balance text-[28px] font-bold tracking-[-0.03em] md:text-[34px]">
-          Merci, votre commande est confirmée.
+          {order?.status === "PAID" ? "Merci, votre commande est confirmée." : "Votre commande a bien été reçue."}
         </h1>
         <p className="mt-3 text-[13.5px] leading-relaxed text-ink-muted">
           {order ? (

@@ -45,6 +45,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (!payload.transferCode || !["SUCCESSFUL", "FAILED", "PENDING"].includes(payload.status) || !Number.isInteger(payload.amount) || payload.amount < 0) {
+      return NextResponse.json({ message: "Payload invalide." }, { status: 400 });
+    }
     const order = await db.order.findFirst({
       where: {
         OR: [
@@ -60,21 +63,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
+    // Never accept a success event for a different amount than the order total.
+    if (payload.status === "SUCCESSFUL" && payload.amount !== Math.round(order.total / 100)) {
+      console.error(`[fapshi] Montant incohérent pour ${order.orderNumber}.`);
+      return NextResponse.json({ message: "Montant invalide." }, { status: 400 });
+    }
+
     if (payload.status === "SUCCESSFUL") {
       if (order.paymentStatus === "PAID") {
         return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
       }
 
-      await db.order.update({
-        where: { id: order.id },
-        data: {
-          status: "PAID",
-          paymentStatus: "PAID",
-          statusHistory: {
-            create: { status: "PAID", note: "Paiement Mobile Money confirmé par Fapshi" },
-          },
-        },
+      const changed = await db.$transaction(async (tx) => {
+        const result = await tx.order.updateMany({ where: { id: order.id, paymentStatus: { in: ["UNPAID", "PENDING_CONFIRMATION"] } }, data: { status: "PAID", paymentStatus: "PAID" } });
+        if (result.count) {
+          await tx.orderStatusHistory.create({ data: { orderId: order.id, status: "PAID", note: "Paiement Mobile Money confirmé par Fapshi" } });
+          for (const item of order.items) await tx.product.update({ where: { id: item.productId }, data: { soldCount: { increment: item.quantity } } });
+        }
+        return result.count;
       });
+      if (!changed) return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
 
       const email = order.user?.email ?? order.guestEmail;
       if (email) {
@@ -96,6 +104,8 @@ export async function POST(request: Request) {
       }
 
       await db.$transaction(async (tx) => {
+        const changed = await tx.order.updateMany({ where: { id: order.id, paymentStatus: { in: ["UNPAID", "PENDING_CONFIRMATION"] } }, data: { status: "CANCELLED", paymentStatus: "FAILED" } });
+        if (!changed.count) return;
         for (const item of order.items) {
           if (item.variantId) {
             await tx.productVariant.update({
@@ -104,15 +114,8 @@ export async function POST(request: Request) {
             });
           }
         }
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            status: "CANCELLED",
-            paymentStatus: "FAILED",
-            statusHistory: {
-              create: { status: "CANCELLED", note: "Paiement Mobile Money échoué" },
-            },
-          },
+        await tx.orderStatusHistory.create({
+          data: { orderId: order.id, status: "CANCELLED", note: "Paiement Mobile Money échoué; stock restitué" },
         });
       });
     }

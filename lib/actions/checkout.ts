@@ -140,6 +140,19 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
 
   try {
     const order = await db.$transaction(async (tx) => {
+      const reserved: { productId: string; variantId: string; quantity: number; product: typeof lines[number]["product"]; line: typeof lines[number]["line"] }[] = [];
+      for (const { product, line } of lines) {
+        const variant = await tx.productVariant.findFirst({
+          where: { productId: product.id, size: line.size, color: line.color },
+        });
+        if (!variant) throw new Error(`Variante introuvable pour ${product.name}.`);
+        const changed = await tx.productVariant.updateMany({
+          where: { id: variant.id, stock: { gte: line.quantity } },
+          data: { stock: { decrement: line.quantity } },
+        });
+        if (changed.count !== 1) throw new Error(`Stock insuffisant pour ${product.name}.`);
+        reserved.push({ productId: product.id, variantId: variant.id, quantity: line.quantity, product, line });
+      }
       const created = await tx.order.create({
         data: {
           orderNumber,
@@ -154,47 +167,34 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
           total,
           shippingCity: parsed.data.city,
           notes: parsed.data.instructions,
-          items: {
-            create: await Promise.all(
-              lines.map(async ({ product, line }) => {
-                const variant = await tx.productVariant.findFirst({
-                  where: { productId: product.id, size: line.size, color: line.color },
-                });
-                if (variant) {
-                  await tx.productVariant.update({
-                    where: { id: variant.id },
-                    data: { stock: { decrement: line.quantity } },
-                  });
-                }
-                return {
-                  productId: product.id,
-                  variantId: variant?.id ?? null,
-                  productName: product.name,
-                  variantInfo: `Taille: ${line.size}, Couleur: ${line.color}`,
-                  imageUrl: product.images[0]?.url,
-                  quantity: line.quantity,
-                  unitPrice: unitPriceFor(product.price, line.quantity),
-                  total: unitPriceFor(product.price, line.quantity) * line.quantity,
-                };
-              })
-            ),
-          },
+          items: { create: reserved.map(({ product, line, variantId }) => ({
+            productId: product.id, variantId, productName: product.name,
+            variantInfo: `Taille: ${line.size}, Couleur: ${line.color}`,
+            imageUrl: product.images[0]?.url, quantity: line.quantity,
+            unitPrice: unitPriceFor(product.price, line.quantity),
+            total: unitPriceFor(product.price, line.quantity) * line.quantity,
+          })) },
           statusHistory: {
             create: { status: "PENDING", note: "Commande créée" },
           },
         },
       });
 
-      await tx.product.updateMany({
-        where: { id: { in: lines.map(({ product }) => product.id) } },
-        data: { soldCount: { increment: 1 } },
-      });
-
       return created;
     });
 
     if (!isFapshiConfigured) {
-      return { ok: true, orderNumber: order.orderNumber };
+      await db.$transaction(async (tx) => {
+        const canceled = await tx.order.updateMany({ where: { id: order.id, paymentStatus: "UNPAID" }, data: { status: "CANCELLED", paymentStatus: "FAILED" } });
+        if (canceled.count) {
+          const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
+          for (const item of items) if (item.variantId) {
+            await tx.productVariant.update({ where: { id: item.variantId }, data: { stock: { increment: item.quantity } } });
+          }
+          await tx.orderStatusHistory.create({ data: { orderId: order.id, status: "CANCELLED", note: "Paiement non configuré; stock restitué" } });
+        }
+      });
+      return { ok: false, message: "Le paiement n'est pas configuré. Aucun stock n'a été réservé durablement." };
     }
 
     let payment: FapshiPaymentResponse | null = null;
@@ -211,18 +211,15 @@ export async function placeOrder(input: CheckoutInput): Promise<CheckoutResult> 
     }
 
     if (!payment) {
-      await db.order.update({
-        where: { id: order.id },
-        data: {
-          status: "CANCELLED",
-          paymentStatus: "FAILED",
-          statusHistory: {
-            create: {
-              status: "CANCELLED",
-              note: "Paiement Mobile Money indisponible",
-            },
-          },
-        },
+      await db.$transaction(async (tx) => {
+        const canceled = await tx.order.updateMany({ where: { id: order.id, paymentStatus: "UNPAID" }, data: { status: "CANCELLED", paymentStatus: "FAILED" } });
+        if (canceled.count) {
+          const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
+          for (const item of items) if (item.variantId) {
+            await tx.productVariant.update({ where: { id: item.variantId }, data: { stock: { increment: item.quantity } } });
+          }
+          await tx.orderStatusHistory.create({ data: { orderId: order.id, status: "CANCELLED", note: "Paiement indisponible; stock restitué" } });
+        }
       });
       return {
         ok: false,

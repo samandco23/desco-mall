@@ -39,6 +39,21 @@ const statusSchema = z.object({
 
 export type AdminActionResult = { ok: boolean; message: string };
 
+export async function updateVariantStock(input: { variantId: string; stock: number; sku?: string }): Promise<AdminActionResult> {
+  const session = await requireAdmin();
+  if (!session) return { ok: false, message: "Accès administrateur requis." };
+  const parsed = z.object({ variantId: z.string().min(1), stock: z.number().int().min(0).max(1_000_000), sku: z.string().trim().max(120).optional() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Quantité de stock invalide." };
+  if (!hasDatabase) return { ok: false, message: "Connectez la base de données pour modifier durablement le stock." };
+  try {
+    await db.productVariant.update({ where: { id: parsed.data.variantId }, data: { stock: parsed.data.stock, ...(parsed.data.sku !== undefined ? { sku: parsed.data.sku || null } : {}) } });
+    return { ok: true, message: "Stock mis à jour." };
+  } catch (error) {
+    console.error("[admin] Mise à jour du stock impossible", error);
+    return { ok: false, message: "Variante introuvable, SKU déjà utilisé ou mise à jour impossible." };
+  }
+}
+
 export async function updateOrderStatus(input: {
   orderId: string;
   status: OrderStatus;

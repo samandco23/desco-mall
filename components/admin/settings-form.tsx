@@ -16,6 +16,7 @@ type Integrations = {
   brevo: boolean;
   redis: boolean;
   uploadthing: boolean;
+  stock: boolean;
 };
 
 export function SettingsForm({
@@ -44,6 +45,7 @@ export function SettingsForm({
     { label: "Brevo", description: "Emails transactionnels et CRM", enabled: integrations.brevo },
     { label: "Upstash Redis", description: "Panier invité et rate limiting", enabled: integrations.redis },
     { label: "Uploadthing", description: "Upload des images produit", enabled: integrations.uploadthing },
+    { label: "Outil de gestion de stock", description: "Synchronisation signée par SKU", enabled: integrations.stock },
   ];
 
   return (
@@ -169,6 +171,9 @@ export function SettingsForm({
           <div className="rounded-sm bg-paper-soft px-3 py-2">
             <p className="font-medium">Stock externe</p>
             <code className="text-[10.5px] text-ink-muted">POST /api/webhooks/stock</code>
+            <p className="mt-1 text-[10px] text-ink-faint">
+              Configurez STOCK_API_KEY côté serveur. Envoyez le JSON <code>{'{"items":[{"sku":"SKU-123","stock":12}]}'}</code> avec x-desco-signature = sha256=HMAC-SHA256 du corps brut. Les SKU doivent correspondre aux variantes du catalogue.
+            </p>
           </div>
         </div>
       </section>

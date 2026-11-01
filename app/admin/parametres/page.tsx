@@ -33,6 +33,7 @@ export default function AdminSettingsPage() {
           brevo: isBrevoConfigured,
           redis: isRedisConfigured,
           uploadthing: Boolean(process.env.UPLOADTHING_SECRET),
+          stock: Boolean(process.env.STOCK_API_KEY),
         }}
       />
     </div>
