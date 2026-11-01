@@ -3,8 +3,10 @@ import { PrismaNeon } from "@prisma/adapter-neon";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 
-// Requis pour le driver Neon en environnement Node.js
-neonConfig.webSocketConstructor = ws;
+// Node 22+ fournit un WebSocket natif. Le polyfill ws sert uniquement aux runtimes plus anciens.
+if (typeof globalThis.WebSocket === "undefined") {
+  neonConfig.webSocketConstructor = ws;
+}
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
