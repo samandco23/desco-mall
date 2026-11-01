@@ -6,8 +6,11 @@ import { demoCategories, demoOrders, demoProducts } from "../lib/demo-data";
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
-  const clientPassword = process.env.SEED_CLIENT_PASSWORD ?? "client123";
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminPassword || adminPassword.length < 12) {
+    throw new Error("Définissez SEED_ADMIN_PASSWORD (12 caractères minimum) avant le seed.");
+  }
+  const includeDemoData = process.env.NODE_ENV !== "production" && process.env.SEED_INCLUDE_DEMO_DATA === "true";
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@descomall.cm" },
@@ -22,23 +25,23 @@ async function main() {
     },
   });
 
-  const client = await prisma.user.upsert({
+  const client = includeDemoData ? await prisma.user.upsert({
     where: { email: "client@descomall.cm" },
     update: {},
     create: {
       email: "client@descomall.cm",
       name: "Aïcha Ngo Bell",
       phone: "+237 655 234 118",
-      passwordHash: await bcrypt.hash(clientPassword, 12),
+      passwordHash: await bcrypt.hash(process.env.SEED_CLIENT_PASSWORD ?? "client123", 12),
       role: "USER",
       emailVerified: new Date(),
     },
-  });
+  }) : null;
 
-  const existingAddress = await prisma.address.findFirst({
+  const existingAddress = client ? await prisma.address.findFirst({
     where: { userId: client.id, label: "Domicile" },
-  });
-  if (!existingAddress) {
+  }) : null;
+  if (client && !existingAddress) {
     await prisma.address.create({
       data: {
         userId: client.id,
@@ -74,7 +77,7 @@ async function main() {
   }
 
   const productIds = new Map<string, string>();
-  for (const product of demoProducts) {
+  if (includeDemoData) for (const product of demoProducts) {
     const categoryId = categoryIds.get(product.category.slug);
     if (!categoryId) continue;
 
@@ -118,25 +121,21 @@ async function main() {
       })),
     });
 
-    await prisma.productVariant.deleteMany({ where: { productId: row.id } });
-    await prisma.productVariant.createMany({
-      data: product.sizes.map((size, index) => ({
-        productId: row.id,
-        size,
-        color: product.colors[0]?.name ?? "Noir",
-        colorHex: product.colors[0]?.hex ?? "#111111",
-        sku: `${product.slug}-${size}`.toLowerCase().replace(/\s+/g, "-"),
-        stock: product.stock[size] ?? 0,
-        stockAlert: 5,
-      })),
-    });
+    for (const size of product.sizes) {
+      const sku = `${product.slug}-${size}`.toLowerCase().replace(/\s+/g, "-");
+      await prisma.productVariant.upsert({
+        where: { sku },
+        update: { size, color: product.colors[0]?.name ?? "Noir", colorHex: product.colors[0]?.hex ?? "#111111", stockAlert: 5 },
+        create: { productId: row.id, size, color: product.colors[0]?.name ?? "Noir", colorHex: product.colors[0]?.hex ?? "#111111", sku, stock: product.stock[size] ?? 0, stockAlert: 5 },
+      });
+    }
   }
 
-  const clientOrders = demoOrders.filter(
+  const clientOrders = client ? demoOrders.filter(
     (order) => order.customerEmail === "client@descomall.cm"
-  );
+  ) : [];
 
-  for (const order of clientOrders) {
+  if (client) for (const order of clientOrders) {
     const existing = await prisma.order.findUnique({
       where: { orderNumber: order.orderNumber },
     });
@@ -190,7 +189,7 @@ async function main() {
   console.log(
     `Seed terminé : ${demoCategories.length} catégories, ${demoProducts.length} produits, ${clientOrders.length} commandes client.`
   );
-  console.log(`Admin : ${admin.email} · Client : ${client.email}`);
+  console.log(`Admin prêt : ${admin.email}. Données clients de démo : ${includeDemoData ? "activées" : "ignorées"}.`);
 }
 
 main()

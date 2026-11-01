@@ -1,5 +1,6 @@
 import { demoCategories, demoOrders, demoProducts } from "@/lib/demo-data";
 import type { CatalogCategory, CatalogProduct, DemoOrder } from "@/lib/types";
+import { hasDatabase } from "@/lib/db";
 
 export type ProductFilters = {
   category?: string;
@@ -16,7 +17,7 @@ const byNewest = (a: CatalogProduct, b: CatalogProduct) =>
   new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
 async function loadProducts(): Promise<CatalogProduct[]> {
-  if (!process.env.DATABASE_URL) return demoProducts;
+  if (!hasDatabase) return process.env.NODE_ENV === "production" ? [] : demoProducts;
 
   try {
     const { db } = await import("@/lib/db");
@@ -31,7 +32,7 @@ async function loadProducts(): Promise<CatalogProduct[]> {
       orderBy: { createdAt: "desc" },
     });
 
-    if (rows.length === 0) return demoProducts;
+    if (rows.length === 0) return process.env.NODE_ENV === "production" ? [] : demoProducts;
 
     return rows.map((row) => {
       const sizes = Array.from(
@@ -83,7 +84,7 @@ async function loadProducts(): Promise<CatalogProduct[]> {
     });
   } catch (error) {
     console.error("[catalog] Lecture Prisma impossible, catalogue de démonstration utilisé.", error);
-    return demoProducts;
+    return process.env.NODE_ENV === "production" ? [] : demoProducts;
   }
 }
 
